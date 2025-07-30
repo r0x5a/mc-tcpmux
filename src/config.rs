@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use anyhow::{anyhow, ensure};
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -11,9 +11,6 @@ pub struct Config {
 	pub error: ErrorConfig,
 
 	pub servers: Option<Vec<Server>>,
-
-	#[serde(skip)]
-	pub default_server: Option<Server>,
 }
 
 impl Config {
@@ -29,14 +26,6 @@ impl Config {
 		let mut config: Config = toml::from_str(&config)
 			.map_err(|e| anyhow!("Failed to parse config file {}: {}", config_path, e))?;
 
-		if let Some(servers) = &config.servers {
-			for server in servers {
-				if let Some(true) = server.default {
-					ensure!(config.default_server.is_none(), "Multiple default servers defined");
-					config.default_server = Some(server.clone());
-				}
-			}
-		}
 		if let ErrorConfig::Motd(motd) = &mut config.error {
 			motd.json = serde_json::to_string(&motd)
 				.map_err(|e| anyhow!("Failed to serialize MOTD description: {}", e))?;
@@ -45,15 +34,13 @@ impl Config {
 	}
 
 	pub fn find_server(&self, host: &str, port: u16) -> Option<&Server> {
-		let server = self.servers.as_ref().and_then(|l| l.iter().find(|s| s.src.matches(host, port)));
-		server.or(self.default_server.as_ref())
+		self.servers.as_ref().and_then(|l| l.iter().find(|s| s.src.matches(host, port)))
 	}
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Server {
-	pub default: Option<bool>,
 	pub src: Target,
 	pub dst: String,
 }
@@ -61,13 +48,13 @@ pub struct Server {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Target {
-	pub host: String,
+	pub host: Option<String>,
 	pub port: Option<u16>,
 }
 
 impl Target {
 	pub fn matches(&self, host: &str, port: u16) -> bool {
-		self.host == host && self.port.is_none_or(|p| p == port)
+		self.host.as_ref().is_none_or(|p| p == host) && self.port.is_none_or(|p| p == port)
 	}
 }
 
