@@ -1,14 +1,14 @@
 use std::io::Cursor;
 
 use tokio::{
-	io::{AsyncRead, AsyncReadExt},
+	io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
 	net::TcpStream,
 };
 use tracing::info;
 
 use crate::{
-	config::Config,
-	io::{read_packet, read_string, read_varint},
+	config::{Config, ErrorConfig, Motd},
+	io::{calc_varint_size, read_packet, read_string, read_varint, write_varint},
 };
 
 pub enum HandleResult {
@@ -29,19 +29,38 @@ pub async fn handle_packet(
 	match id {
 		0x00 if buf.len() > 1 => {
 			let packet = read_handshake(&mut rdr).await?;
-			info!("Received handshake packet. Version: {}, Host: {}, Port: {}, Intent: {}", packet.version, packet.host, packet.port, packet.intent);
+			info!(
+				"Received handshake packet. Version: {}, Host: {}, Port: {}, Intent: {}",
+				packet.version, packet.host, packet.port, packet.intent
+			);
 
 			let server = config.find_server(&packet.host, packet.port);
 			if let Some(server) = server {
 				info!("Found server. Destination: {}", server.dst);
 				return Ok(HandleResult::Forward((server.dst.clone(), buf)));
-			} else {
-				info!("No matching server found for {}:{}", packet.host, packet.port);
-				// TODO: Return a proper error response (either an error MOTD or just disconnect)
+			}
+
+			info!("No matching server found for {}:{}", packet.host, packet.port);
+			info!("Handling error using \"{}\"", config.error);
+			match config.error {
+				ErrorConfig::Close => return Ok(HandleResult::Close),
+				ErrorConfig::Motd { .. } => return Ok(HandleResult::Continue),
 			}
 		}
 		0x00 => {
-			info!("Received empty handshake packet");
+			info!("Received status request packet.");
+
+			if let ErrorConfig::Motd(Motd { json, .. }) = &config.error {
+				info!("Sending MOTD response");
+
+				let json_len = json.len() as i32;
+				let size = calc_varint_size(0x00) + calc_varint_size(json_len) + json.len();
+
+				write_varint(socket, size as i32).await?;
+				write_varint(socket, 0x00).await?;
+				write_varint(socket, json_len).await?;
+				socket.write_all(json.as_bytes()).await?;
+			}
 		}
 		_ => {
 			info!("Unhandled packet ID: {id}");

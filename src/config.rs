@@ -1,11 +1,14 @@
+use std::fmt::Display;
+
 use anyhow::{anyhow, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
 	pub host: String,
 	pub port: u16,
+	pub error: ErrorConfig,
 
 	pub servers: Option<Vec<Server>>,
 
@@ -33,6 +36,10 @@ impl Config {
 					config.default_server = Some(server.clone());
 				}
 			}
+		}
+		if let ErrorConfig::Motd(motd) = &mut config.error {
+			motd.json = serde_json::to_string(&motd)
+				.map_err(|e| anyhow!("Failed to serialize MOTD description: {}", e))?;
 		}
 		Ok(config)
 	}
@@ -62,4 +69,64 @@ impl Target {
 	pub fn matches(&self, host: &str, port: u16) -> bool {
 		self.host == host && self.port.is_none_or(|p| p == port)
 	}
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub enum ErrorConfig {
+	#[serde(rename = "close")]
+	Close,
+
+	#[serde(rename = "motd")]
+	Motd(Motd),
+}
+
+impl Display for ErrorConfig {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			ErrorConfig::Close => write!(f, "Close"),
+			ErrorConfig::Motd(_) => write!(f, "Motd"),
+		}
+	}
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Motd {
+	version: MotdVersion,
+	description: serde_json::Value,
+	#[serde(default)]
+	players: MotdPlayers,
+	favicon: Option<String>,
+
+	#[serde(skip)]
+	pub json: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MotdVersion {
+	pub name: String,
+	pub protocol: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MotdPlayers {
+	pub max: i32,
+	pub online: i32,
+	pub sample: Option<Vec<MotdPlayer>>,
+}
+
+impl Default for MotdPlayers {
+	fn default() -> Self {
+		Self { max: 20, online: 0, sample: None }
+	}
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MotdPlayer {
+	pub name: String,
+	pub id: String,
 }

@@ -55,6 +55,8 @@ async fn proxy(socket: &mut TcpStream, target: String, buf: &[u8]) -> anyhow::Re
 	info!("Proxying connection to {}", target);
 
 	let mut dst = TcpStream::connect(target).await?;
+
+	// write handshake packet
 	write_varint(&mut dst, buf.len() as i32).await?;
 	dst.write_all(buf).await?;
 

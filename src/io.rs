@@ -25,6 +25,16 @@ pub async fn write_varint<W: AsyncWrite + Unpin>(writer: &mut W, value: i32) -> 
 	Ok(())
 }
 
+pub const fn calc_varint_size(value: i32) -> usize {
+	match value {
+		..0 => 5,
+		0..=0x7F => 1,
+		0x80..=0x3FFF => 2,
+		0x4000..=0x1FFFFF => 3,
+		_ => 4,
+	}
+}
+
 pub async fn read_string<R: AsyncRead + Unpin>(reader: &mut R) -> anyhow::Result<String> {
 	let len = read_varint(reader).await?;
 	let mut buf = vec![0; len as usize];
