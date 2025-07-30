@@ -22,6 +22,10 @@ pub async fn handle_packet(
 	socket: &mut TcpStream,
 	config: &Config,
 ) -> anyhow::Result<HandleResult> {
+	if socket.peek(&mut [0; 1]).await? == 0 {
+		info!("Socket closed by client");
+		return Ok(HandleResult::Close);
+	}
 	let buf = read_packet(socket).await?;
 	let mut rdr = Cursor::new(&buf);
 
@@ -60,6 +64,21 @@ pub async fn handle_packet(
 				write_varint(socket, 0x00).await?;
 				write_varint(socket, json_len).await?;
 				socket.write_all(json.as_bytes()).await?;
+				socket.flush().await?;
+			}
+		}
+		0x01 => {
+			let ping_id = read_ping(&mut rdr).await?;
+			info!("Received ping packet. ID: {ping_id}");
+
+			if let ErrorConfig::Motd(Motd { ping, .. }) = &config.error {
+				if *ping {
+					write_varint(socket, buf.len() as i32).await?;
+					socket.write_all(&buf).await?; // echo the packet
+					socket.flush().await?;
+				} else {
+					info!("Ping handling is disabled in the configuration");
+				}
 			}
 		}
 		_ => {
@@ -86,4 +105,8 @@ async fn read_handshake<R: AsyncRead + Unpin>(socket: &mut R) -> anyhow::Result<
 	let intent = read_varint(socket).await?;
 
 	Ok(Handshake { version, host, port, intent })
+}
+
+async fn read_ping<R: AsyncRead + Unpin>(socket: &mut R) -> anyhow::Result<i64> {
+	Ok(socket.read_i64().await?)
 }

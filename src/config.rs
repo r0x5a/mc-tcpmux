@@ -95,12 +95,20 @@ impl Display for ErrorConfig {
 pub struct Motd {
 	version: MotdVersion,
 	description: serde_json::Value,
+	favicon: Option<String>,
+
+	#[serde(default = "default_ping")]
+	pub ping: bool,
+
 	#[serde(default)]
 	players: MotdPlayers,
-	favicon: Option<String>,
 
 	#[serde(skip)]
 	pub json: String,
+}
+
+fn default_ping() -> bool {
+	true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

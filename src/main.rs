@@ -26,6 +26,8 @@ async fn main() -> anyhow::Result<()> {
 
 		tokio::spawn(
 			async move {
+				info!("Accepted connection.");
+
 				loop {
 					match handle_packet(&mut socket, &config).await {
 						Ok(HandleResult::Continue) => {}
