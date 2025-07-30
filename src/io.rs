@@ -1,5 +1,5 @@
 use anyhow::{anyhow, ensure};
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub async fn read_varint<R: AsyncRead + Unpin>(reader: &mut R) -> anyhow::Result<i32> {
 	let mut value = 0;
@@ -13,6 +13,16 @@ pub async fn read_varint<R: AsyncRead + Unpin>(reader: &mut R) -> anyhow::Result
 		pos += 7;
 		ensure!(pos < 32, "VarInt is too big");
 	}
+}
+
+pub async fn write_varint<W: AsyncWrite + Unpin>(writer: &mut W, value: i32) -> anyhow::Result<()> {
+	let mut value = value as u32;
+	while value >= 0x80 {
+		writer.write_u8((value & 0x7F) as u8 | 0x80).await?;
+		value >>= 7;
+	}
+	writer.write_u8(value as u8).await?;
+	Ok(())
 }
 
 pub async fn read_string<R: AsyncRead + Unpin>(reader: &mut R) -> anyhow::Result<String> {

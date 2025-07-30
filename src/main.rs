@@ -1,14 +1,17 @@
-use tokio::net::TcpListener;
-use tracing::{Level, event, span};
+use tokio::{
+	io::{copy_bidirectional, AsyncWriteExt},
+	net::{TcpListener, TcpStream},
+};
+use tracing::{Instrument, error, info, info_span};
 
 use crate::{
 	config::Config,
-	handler::{HandleResult, handle_packet},
+	handler::{handle_packet, HandleResult}, io::write_varint,
 };
 
 mod config;
 mod handler;
-mod parser;
+mod io;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -21,27 +24,40 @@ async fn main() -> anyhow::Result<()> {
 		let (mut socket, addr) = listener.accept().await?;
 		let config = config.clone();
 
-		tokio::spawn(async move {
-			let span = span!(Level::INFO, "connection", addr = %addr);
-			let _enter = span.enter();
-
-			let _dest = loop {
-				match handle_packet(&mut socket, &config).await {
-					Ok(HandleResult::Continue) => {}
-					Ok(HandleResult::Close) => {
-						event!(Level::INFO, "Connection closed");
-						return;
-					}
-					Ok(HandleResult::Forward) => {
-						event!(Level::INFO, "Forwarding packet (not implemented)");
-						continue;
-					}
-					Err(e) => {
-						event!(Level::ERROR, "Error handling packet: {e}");
-						return;
+		tokio::spawn(
+			async move {
+				loop {
+					match handle_packet(&mut socket, &config).await {
+						Ok(HandleResult::Continue) => {}
+						Ok(HandleResult::Close) => break info!("Connection closed"),
+						Ok(HandleResult::Forward((target, buf))) => {
+							if let Err(e) = proxy(&mut socket, target, &buf).await {
+								error!("Failed to proxy connection: {e}");
+							}
+							break;
+						}
+						Err(e) => break error!("Error handling packet: {e}"),
 					}
 				}
-			};
-		});
+
+				if let Err(e) = socket.shutdown().await {
+					error!("Failed to shutdown socket: {e}");
+				} else {
+					info!("Socket shutdown successfully");
+				}
+			}
+			.instrument(info_span!("handle_conn", addr = %addr)),
+		);
 	}
+}
+
+async fn proxy(socket: &mut TcpStream, target: String, buf: &[u8]) -> anyhow::Result<()> {
+	info!("Proxying connection to {}", target);
+
+	let mut dst = TcpStream::connect(target).await?;
+	write_varint(&mut dst, buf.len() as i32).await?;
+	dst.write_all(buf).await?;
+
+	copy_bidirectional(socket, &mut dst).await?;
+	Ok(())
 }

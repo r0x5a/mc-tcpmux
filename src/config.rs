@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, ensure};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -8,6 +8,9 @@ pub struct Config {
 	pub port: u16,
 
 	pub servers: Option<Vec<Server>>,
+
+	#[serde(skip)]
+	pub default_server: Option<Server>,
 }
 
 impl Config {
@@ -20,23 +23,43 @@ impl Config {
 		let config_path = args.get(1).map_or("config.toml", |s| s.as_str());
 		let config = std::fs::read_to_string(config_path)
 			.map_err(|e| anyhow!("Failed to read config file {}: {}", config_path, e))?;
-		let config: Config = toml::from_str(&config)
+		let mut config: Config = toml::from_str(&config)
 			.map_err(|e| anyhow!("Failed to parse config file {}: {}", config_path, e))?;
 
+		if let Some(servers) = &config.servers {
+			for server in servers {
+				if let Some(true) = server.default {
+					ensure!(config.default_server.is_none(), "Multiple default servers defined");
+					config.default_server = Some(server.clone());
+				}
+			}
+		}
 		Ok(config)
+	}
+
+	pub fn find_server(&self, host: &str, port: u16) -> Option<&Server> {
+		let server = self.servers.as_ref().and_then(|l| l.iter().find(|s| s.src.matches(host, port)));
+		server.or(self.default_server.as_ref())
 	}
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Server {
-	pub src: String,
-	pub target: Target,
+	pub default: Option<bool>,
+	pub src: Target,
+	pub dst: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Target {
-	pub host: Option<String>,
+	pub host: String,
 	pub port: Option<u16>,
+}
+
+impl Target {
+	pub fn matches(&self, host: &str, port: u16) -> bool {
+		self.host == host && self.port.is_none_or(|p| p == port)
+	}
 }
