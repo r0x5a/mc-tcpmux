@@ -1,4 +1,4 @@
-use std::{fmt::Display, path::Path};
+use std::path::Path;
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
 	pub host: String,
 	pub port: u16,
-	pub error: ErrorConfig,
+	pub motd: Option<Motd>,
 
 	pub servers: Option<Vec<Server>>,
 }
@@ -17,13 +17,9 @@ impl Config {
 	pub fn load(config_path: &Path) -> anyhow::Result<Self> {
 		let config = std::fs::read_to_string(config_path)
 			.map_err(|e| anyhow!("Failed to read config file {}: {}", config_path.display(), e))?;
-		let mut config: Config = toml::from_str(&config)
+		let config: Config = toml::from_str(&config)
 			.map_err(|e| anyhow!("Failed to parse config file {}: {}", config_path.display(), e))?;
 
-		if let ErrorConfig::Motd(motd) = &mut config.error {
-			motd.json = serde_json::to_string(&motd)
-				.map_err(|e| anyhow!("Failed to serialize MOTD description: {}", e))?;
-		}
 		Ok(config)
 	}
 
@@ -52,65 +48,35 @@ impl Target {
 	}
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub enum ErrorConfig {
-	#[serde(rename = "close")]
-	Close,
-
-	#[serde(rename = "motd")]
-	Motd(Motd),
-}
-
-impl Display for ErrorConfig {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self {
-			ErrorConfig::Close => write!(f, "Close"),
-			ErrorConfig::Motd(_) => write!(f, "Motd"),
-		}
-	}
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Motd {
-	version: MotdVersion,
-	description: serde_json::Value,
-	favicon: Option<String>,
+	pub version: MotdVersion,
+	pub description: Option<serde_json::Value>,
+	pub favicon: Option<String>,
+	pub players: Option<MotdPlayers>,
 
 	#[serde(default = "default_ping")]
 	pub ping: bool,
-
-	#[serde(default)]
-	players: MotdPlayers,
-
-	#[serde(skip)]
-	pub json: String,
 }
 
 fn default_ping() -> bool {
 	true
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct MotdVersion {
-	pub name: String,
-	pub protocol: i32,
+	pub name: Option<String>,
+	pub protocol: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MotdPlayers {
-	pub max: i32,
-	pub online: i32,
+	pub max: Option<i32>,
+	pub online: Option<i32>,
 	pub sample: Option<Vec<MotdPlayer>>,
-}
-
-impl Default for MotdPlayers {
-	fn default() -> Self {
-		Self { max: 20, online: 0, sample: None }
-	}
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

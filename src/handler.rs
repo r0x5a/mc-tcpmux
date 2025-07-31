@@ -1,5 +1,6 @@
 use std::io::Cursor;
 
+use serde_json::json;
 use tokio::{
 	io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
 	net::TcpStream,
@@ -7,7 +8,7 @@ use tokio::{
 use tracing::{error, info};
 
 use crate::{
-	config::{Config, ErrorConfig, Motd},
+	config::{Config, Motd},
 	io::{calc_varint_size, read_packet, read_string, read_varint, write_varint},
 };
 
@@ -17,9 +18,15 @@ pub enum HandleResult {
 	Forward((String, Vec<u8>)),
 }
 
+#[derive(Debug, Default)]
+pub struct Context {
+	pub protocol: Option<i32>,
+}
+
 pub async fn handle_connection(mut socket: TcpStream, config: &Config) {
+	let mut ctx = Context::default();
 	loop {
-		match handle_packet(&mut socket, config).await {
+		match handle_packet(&mut socket, config, &mut ctx).await {
 			Ok(HandleResult::Continue) => {}
 			Ok(HandleResult::Close) => break info!("Connection closed"),
 			Ok(HandleResult::Forward((target, buf))) => {
@@ -52,10 +59,11 @@ async fn proxy(socket: &mut TcpStream, target: String, buf: &[u8]) -> anyhow::Re
 	Ok(())
 }
 
-#[tracing::instrument(skip(socket, config))]
+#[tracing::instrument(skip(socket, config, context))]
 pub async fn handle_packet(
 	socket: &mut TcpStream,
 	config: &Config,
+	context: &mut Context,
 ) -> anyhow::Result<HandleResult> {
 	if socket.peek(&mut [0; 1]).await? == 0 {
 		info!("Socket closed by client");
@@ -72,6 +80,7 @@ pub async fn handle_packet(
 				"Received handshake packet. Version: {}, Host: {}, Port: {}, Intent: {}",
 				packet.version, packet.host, packet.port, packet.intent
 			);
+			context.protocol = Some(packet.version);
 
 			let server = config.find_server(&packet.host, packet.port);
 			if let Some(server) = server {
@@ -80,17 +89,28 @@ pub async fn handle_packet(
 			}
 
 			info!("No matching server found for {}:{}", packet.host, packet.port);
-			info!("Handling error using \"{}\"", config.error);
-			match config.error {
-				ErrorConfig::Close => return Ok(HandleResult::Close),
-				ErrorConfig::Motd { .. } => return Ok(HandleResult::Continue),
+			if config.motd.is_none() {
+				info!("No error handling configured, closing connection");
+				return Ok(HandleResult::Close);
 			}
 		}
 		0x00 => {
 			info!("Received status request packet.");
 
-			if let ErrorConfig::Motd(Motd { json, .. }) = &config.error {
+			if let Some(motd) = &config.motd {
 				info!("Sending MOTD response");
+
+				let version = &motd.version;
+				let json = json!({
+					"version": {
+						"name": version.name,
+						"protocol": version.protocol.or(context.protocol).unwrap_or_default(),
+					},
+					"description": motd.description,
+					"favicon": motd.favicon,
+					"players": motd.players,
+				})
+				.to_string();
 
 				let json_len = json.len() as i32;
 				let size = calc_varint_size(0x00) + calc_varint_size(json_len) + json.len();
@@ -106,7 +126,7 @@ pub async fn handle_packet(
 			let ping_id = read_ping(&mut rdr).await?;
 			info!("Received ping packet. ID: {ping_id}");
 
-			if let ErrorConfig::Motd(Motd { ping, .. }) = &config.error {
+			if let Some(Motd { ping, .. }) = &config.motd {
 				if *ping {
 					write_varint(socket, buf.len() as i32).await?;
 					socket.write_all(&buf).await?; // echo the packet
