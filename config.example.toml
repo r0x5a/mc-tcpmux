@@ -1,0 +1,75 @@
+# The interface and port the server will listen on.
+host = '0.0.0.0'
+port = 25565
+
+# Servers configuration.
+#
+# The servers to which the traffic will be forwarded.
+# They will be matched against incoming connections in the order they are defined.
+# Each server must have a `src` and a `dst` field.
+[[servers]]
+
+# The host and port that will be matched against incoming connections.
+# If `host` is not specified, it matches all hosts.
+# If `port` is not specified, it matches all ports.
+# Setting `src` with `{}` matches all hosts and ports.
+src = { host = 'survival.example.com', port = 25565 }
+
+# The destination address to which the traffic will be forwarded.
+# The format is `host:port` and `port` is REQUIRED. Only specifying `host` is INVALID.
+dst = '127.0.0.1:10000'
+
+[[servers]]
+src = { host = 'creative.example.com', port = 25565 }
+dst = '127.0.0.1:10001'
+
+# MOTD configuration.
+#
+# This is the error MOTD that will be sent to clients when no matching server is found.
+# It can be used to display a custom message or an error.
+# If not specified, the server will close the connection without sending any status response.
+# Every field under `[motd]` is optional.
+[motd]
+
+# The version of the server.
+# This field is optional and both `name` and `protocol` are also optional.
+# - The `name` field is used when the client connects with a non-matching protocol version.
+#   If not specified, the game will display "Old" if not compatible.
+# - The `protocol` field is the protocol version of the server.
+#   This can be found from the wiki page https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/Protocol_version_numbers#Versions_after_the_Netty_rewrite .
+#   If not specified, the server will use the same protocol version as the client, makeing it compatible with all versions.
+# version = { name = '1.21.1', protocol = 767 }
+
+# The actual MOTD description that will be sent to clients.
+# If not specified, nothing will be displayed.
+# This can be a simple string or a more complex JSON object.
+# The JSON format can be found at https://minecraft.wiki/w/Text_component_format .
+description = 'no such server'
+
+# The favicon of the server.
+# This is a base64 encoded PNG image.
+# If not specified, no favicon will be displayed.
+# favicon = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAADUExURWbM/6Ft/YcAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAYdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuNBLfpoMAAAC2ZVhJZklJKgAIAAAABQAaAQUAAQAAAEoAAAAbAQUAAQAAAFIAAAAoAQMAAQAAAAIAAAAxAQIAEAAAAFoAAABphwQAAQAAAGoAAAAAAAAAYAAAAAEAAABgAAAAAQAAAFBhaW50Lk5FVCA1LjEuNAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlAAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAADX5rshveZftAAAABlJREFUSMdjYBgFo2AUjIJRMApGwSggDQAACEAAAfSdJnsAAAAASUVORK5CYII='
+
+# Whether to respond to ping requests.
+# If set to `true`, the server will respond to ping requests.
+# If set to `false` or not specified, the server will not respond to ping requests.
+ping = true
+
+# The players configuration.
+# Default values are set to 20 max players and 0 online players.
+# If not specified, the client will display "???" for player count.
+[motd.players]
+
+# The maximum number of players that can join the server.
+# If not specified, the client will display "???" for player count.
+max = 20
+
+# The number of players currently online.
+# If not specified, the client will display "???" for player count.
+online = 0
+
+# A sample of players currently online.
+# This is an array of player objects, each containing a `name` and `id`.
+# If empty or not specified, no sample will be displayed in the client.
+# sample = [{ name = 'testplayer', id = '00000000-0000-0000-0000-000000000000' }]

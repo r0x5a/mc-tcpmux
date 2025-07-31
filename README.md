@@ -6,11 +6,13 @@ This is a study project and is not intended for production use. It is a work in 
 
 # Usage
 
-TODO
+1. Install it using `cargo install mc-tcpmux`.
+2. Create a configuration file based on `config.example.toml`. Instructions can be found inside the file.
+3. Run the server with `mc-tcpmux path/to/config.toml`. Add `-r` to auto-reload the configuration file on changes.
 
 # Technical Details
 
-TODO
+[The handshake packet](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Handshake) sent by the client contains the server address and port used to connect. This project intercepts that packet and proxies the connection to the appropriate server based on the configuration file.
 
 # Similar Projects
 
