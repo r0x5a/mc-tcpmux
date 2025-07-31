@@ -2,6 +2,10 @@
 name = "mc-tcpmux"
 version = "0.1.0"
 edition = "2024"
+description = "A TCP port multiplexer for Minecraft servers."
+license = "MIT"
+homepage = "https://github.com/r0x5a/mc-tcpmux"
+repository = "https://github.com/r0x5a/mc-tcpmux.git"
 
 [dependencies]
 anyhow = "1.0.98"
