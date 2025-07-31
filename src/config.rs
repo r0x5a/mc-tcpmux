@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, path::Path};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -14,17 +14,11 @@ pub struct Config {
 }
 
 impl Config {
-	pub fn load() -> anyhow::Result<Self> {
-		let args: Vec<_> = std::env::args().collect();
-		if args.len() > 2 {
-			eprintln!("Usage: {} [config file]", args[0]);
-			std::process::exit(1);
-		}
-		let config_path = args.get(1).map_or("config.toml", |s| s.as_str());
+	pub fn load(config_path: &Path) -> anyhow::Result<Self> {
 		let config = std::fs::read_to_string(config_path)
-			.map_err(|e| anyhow!("Failed to read config file {}: {}", config_path, e))?;
+			.map_err(|e| anyhow!("Failed to read config file {}: {}", config_path.display(), e))?;
 		let mut config: Config = toml::from_str(&config)
-			.map_err(|e| anyhow!("Failed to parse config file {}: {}", config_path, e))?;
+			.map_err(|e| anyhow!("Failed to parse config file {}: {}", config_path.display(), e))?;
 
 		if let ErrorConfig::Motd(motd) = &mut config.error {
 			motd.json = serde_json::to_string(&motd)

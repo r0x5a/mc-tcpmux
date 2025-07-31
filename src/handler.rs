@@ -4,7 +4,7 @@ use tokio::{
 	io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
 	net::TcpStream,
 };
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
 	config::{Config, ErrorConfig, Motd},
@@ -15,6 +15,41 @@ pub enum HandleResult {
 	Continue,
 	Close,
 	Forward((String, Vec<u8>)),
+}
+
+pub async fn handle_connection(mut socket: TcpStream, config: &Config) {
+	loop {
+		match handle_packet(&mut socket, config).await {
+			Ok(HandleResult::Continue) => {}
+			Ok(HandleResult::Close) => break info!("Connection closed"),
+			Ok(HandleResult::Forward((target, buf))) => {
+				if let Err(e) = proxy(&mut socket, target, &buf).await {
+					error!("Failed to proxy connection: {e}");
+				}
+				break;
+			}
+			Err(e) => break error!("Error handling packet: {e}"),
+		}
+	}
+
+	if let Err(e) = socket.shutdown().await {
+		error!("Failed to shutdown socket: {e}");
+	} else {
+		info!("Socket shutdown successfully");
+	}
+}
+
+async fn proxy(socket: &mut TcpStream, target: String, buf: &[u8]) -> anyhow::Result<()> {
+	info!("Proxying connection to {}", target);
+
+	let mut dst = TcpStream::connect(target).await?;
+
+	// write handshake packet
+	write_varint(&mut dst, buf.len() as i32).await?;
+	dst.write_all(buf).await?;
+
+	tokio::io::copy_bidirectional(socket, &mut dst).await?;
+	Ok(())
 }
 
 #[tracing::instrument(skip(socket, config))]
